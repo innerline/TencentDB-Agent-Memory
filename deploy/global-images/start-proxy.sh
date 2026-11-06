@@ -144,6 +144,10 @@ injection:
     - skill
     - knowledge
     - tdai-memory
+  # 下发到 <skill_tools>/<tdai_memory_tools> 的网关地址。未配（或空）时 fallback
+  # 为容器自身 host:port —— 仅单节点/本地开发可用；多节点必须显式配置。
+  # 由 .env 的 PROXY_EXTERNAL_GATEWAY_URL 驱动（2026-11-06 OpenCode leg）。
+  externalGatewayUrl: "${PROXY_EXTERNAL_GATEWAY_URL:-}"
 
 redis:
   enabled: false
@@ -154,7 +158,7 @@ $DOCKER run -d --name "$CONTAINER" \
   --network "$NETWORK" \
   --network-alias proxy \
   --add-host=host.docker.internal:host-gateway \
-  -p "${PROXY_PORT}:8096" \
+  -p "127.0.0.1:${PROXY_PORT}:8096" \
   -v "$CONFIG_FILE:/data/config.yaml:ro" \
   "$PROXY_IMAGE" >/dev/null
 
