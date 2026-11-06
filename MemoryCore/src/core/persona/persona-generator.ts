@@ -202,14 +202,19 @@ export class PersonaGenerator {
 
     // 8. Run LLM agent (sandboxed to dataDir, tools enabled — LLM writes target L3 file directly)
     try {
-      this.logger?.debug?.(`${TAG} Calling LLM for ${targetFile} generation (timeout=180s, tools=enabled, workspaceDir=${this.dataDir})...`);
+      // MWP patch (2026-11-06): persona timeout env-tunable, vendor default 180s preserved
+      // when unset/empty/invalid. Rationale: upstream LLM step latency can exceed 180s for a
+      // 2-3 step tool loop; scene-extract runs the same lane under 300s (see
+      // deploy/global-images/.env MEMORY_PERSONA_TIMEOUT_MS).
+      const personaTimeoutMs = Number(process.env.MEMORY_PERSONA_TIMEOUT_MS) || 180_000;
+      this.logger?.debug?.(`${TAG} Calling LLM for ${targetFile} generation (timeout=${Math.round(personaTimeoutMs / 1000)}s, tools=enabled, workspaceDir=${this.dataDir})...`);
       // langfuse trace 语义：L3 persona 生成有独立 name / 顶级 user/session 列 / 可筛选 tags。
       const traceParams = buildTraceParams("memory.persona-generate", this.traceContext);
       await this.runner.run({
         systemPrompt,
         prompt: userPrompt,
         taskId: "persona-generation",
-        timeoutMs: 180_000,
+        timeoutMs: personaTimeoutMs,
         // maxTokens omitted → core uses the resolved model's maxTokens from catalog
         workspaceDir: this.dataDir,
         // Service mode: LLM tools read/write via StorageAdapter (COS) instead of local FS
