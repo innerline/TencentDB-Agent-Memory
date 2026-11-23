@@ -64,6 +64,13 @@ fi
 PROXY_ENABLE_AUTH="${PROXY_ENABLE_AUTH:-0}"
 PROXY_ENABLE_TDAI="${PROXY_ENABLE_TDAI:-0}"
 PROXY_ENABLE_SESSION_INIT="${PROXY_ENABLE_SESSION_INIT:-0}"
+# PROXY_ENABLE_STORAGE       : injection/skill/binding state persists in ProxyStorage
+#                              (sqlite) instead of the ephemeral in-process fallback
+#                              (redis disabled in this deployment). 2026-11-23 OpenCode
+#                              leg — Pi's audit: "the memory proxy is not keeping turns."
+#                              Data rides the named volume tdai-proxy-data, so it
+#                              survives container recreation (start-proxy recreates).
+PROXY_ENABLE_STORAGE="${PROXY_ENABLE_STORAGE:-0}"
 
 # sessionInit 依赖 auth 拿 user_id；开 sessionInit 时自动补 auth
 if [[ "$PROXY_ENABLE_SESSION_INIT" == "1" && "$PROXY_ENABLE_AUTH" != "1" ]]; then
@@ -151,15 +158,30 @@ injection:
 
 redis:
   enabled: false
+
+# 注入/Skill/binding 状态的持久存储（enabled=false 时完全不读 backend，
+# 行为与迁移前一致）。本部署 redis.enabled=false，关闭 storage 时这些
+# 状态只活在进程内存里 —— 容器一重建就丢（2026-11-23 Pi audit 结论）。
+storage:
+  enabled: $(bool $PROXY_ENABLE_STORAGE)
+  backend: sqlite
+  ttlDays: 7
 YAML
 
 info "启动 proxy (image=$PROXY_IMAGE, port=$PROXY_PORT)"
+VOL_ARGS=()
+if [[ "$PROXY_ENABLE_STORAGE" == "1" ]]; then
+  $DOCKER volume create tdai-proxy-data >/dev/null 2>&1 || true
+  VOL_ARGS=(-v tdai-proxy-data:/data/tdai-memory-proxy)
+fi
+# shellcheck disable=SC2068  # empty-array-safe expansion (macOS bash 3.2 + set -u)
 $DOCKER run -d --name "$CONTAINER" \
   --network "$NETWORK" \
   --network-alias proxy \
   --add-host=host.docker.internal:host-gateway \
   -p "127.0.0.1:${PROXY_PORT}:8096" \
   -v "$CONFIG_FILE:/data/config.yaml:ro" \
+  ${VOL_ARGS[@]+"${VOL_ARGS[@]}"} \
   "$PROXY_IMAGE" >/dev/null
 
 wait_healthy "$CONTAINER" 90
