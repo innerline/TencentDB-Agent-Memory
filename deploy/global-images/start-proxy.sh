@@ -86,7 +86,11 @@ cat > "$CONFIG_FILE" <<YAML
 server:
   host: 0.0.0.0
   port: 8096
-  forwardTimeoutMs: 600000
+  # 2026-11-24: raised from 600000 (10 min) — a GLM-5.4 planning turn thinks
+  # 10–13 min and was cut every time it crossed this proxy (DOMException
+  # [TimeoutError], 17 hits in two days). Override in .env with
+  # PROXY_FORWARD_TIMEOUT_MS.
+  forwardTimeoutMs: ${PROXY_FORWARD_TIMEOUT_MS:-1800000}
 
 upstream:
   url: "${PROXY_UPSTREAM_URL}"
